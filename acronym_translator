@@ -1,0 +1,57 @@
+from flask import Flask, render_template, request, redirect, url_for, send_file
+import docx as docx_module
+import csv
+import os
+
+app = Flask(__name__)
+translations = {}
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/', methods=['POST'])
+def upload_and_translate():
+    global translations
+    word_file = request.files['word_file']
+    csv_file = request.files['csv_file']
+
+    # Read the Word document
+    doc = docx_module.Document(word_file)
+
+    csv_file.save(os.path.join("temp", csv_file.filename))
+
+    # read the CSV file into a dictionary
+    translations = {}
+    with open(os.path.join("temp", csv_file.filename)) as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            print(row)
+            translations[row['acronym']] = (row['abbreviation'], row['description'])
+
+    print(translations)
+    # Replace acronyms in the Word document with their translations
+      # replace acronyms in the document with their translations
+    for para in doc.paragraphs:
+        for run in para.runs:
+            for acronym, abbreviation in translations.items():
+                hyperlink ="{}(http://127.0.0.1:5000/translated_acronym/{})".format(acronym,acronym)
+                run.text = run.text.replace(acronym, hyperlink)
+
+    # Save the translated Word document
+    doc.save('translated_document.docx')
+
+    return redirect(url_for('download'))
+
+@app.route('/translated_acronym/<word>')
+def translated_acronym(word):
+    print(translations)
+    abbreviation, description = translations.get(word, ('', ''))
+    return render_template('translated_acronym.html', acronym=word, abbreviation=abbreviation, description=description)
+
+@app.route('/download')
+def download():
+    return send_file('translated_document.docx', as_attachment=True)
+
+if __name__ == '__main__':
+    app.run(debug=True)
